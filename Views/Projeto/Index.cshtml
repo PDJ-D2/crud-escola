@@ -1,0 +1,104 @@
+﻿@model IEnumerable<CRUD.Models.Projeto>
+
+<h1>Projetos Comunitários</h1>
+
+<p style="text-align:left;">
+    <a asp-action="Create" class="btn btn-primary">Novo Projeto</a>
+</p>
+
+@foreach (var projeto in Model)
+{
+    <div class="card mb-3">
+        <div class="card-header">
+            <strong>@projeto.Nome</strong>
+        </div>
+        <div class="card-body">
+            <ul class="list-group">
+                @foreach (var etapa in projeto.Etapas)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center" id="etapa-@etapa.Id">
+                        <span class="etapa-nome" style="text-decoration:@(etapa.Concluida ? "line-through" : "none")">
+                            @etapa.Nome
+                        </span>
+
+                        <div class="btn-group btn-group-sm">
+                            <!-- Check -->
+                            <form asp-action="ToggleEtapa" method="post" style="display:inline;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="projetoId" value="@projeto.Id" />
+                                <input type="hidden" name="etapaId" value="@etapa.Id" />
+                                <button class="btn btn-sm @(etapa.Concluida ? "btn-success" : "btn-outline-secondary")">
+                                    @(etapa.Concluida ? "✓" : "Marcar")
+                                </button>
+                            </form>
+
+                            <!-- Editar -->
+                            <button class="btn btn-outline-primary" onclick="habilitarEdicao(@projeto.Id, @etapa.Id)">✏️</button>
+
+                            <!-- Excluir -->
+                            <form asp-action="DeleteEtapa" method="post" style="display:inline;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="projetoId" value="@projeto.Id" />
+                                <input type="hidden" name="etapaId" value="@etapa.Id" />
+                                <button class="btn btn-sm btn-danger">X</button>
+                            </form>
+                        </div>
+                    </li>
+                }
+
+                <!-- Adicionar nova etapa se houver menos de 5 -->
+                @if (projeto.Etapas.Count < 5)
+                {
+                    <li class="list-group-item">
+                        <form asp-action="AddEtapa" method="post" class="d-flex">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="projetoId" value="@projeto.Id" />
+                            <input type="text" name="nomeEtapa" class="form-control form-control-sm" placeholder="Nova etapa" required />
+                            <button class="btn btn-sm btn-success ms-2">Adicionar</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+}
+
+<script>
+    function habilitarEdicao(projetoId, etapaId) {
+        const li = document.getElementById(`etapa-${etapaId}`);
+        const span = li.querySelector('.etapa-nome');
+        const nomeAtual = span.textContent;
+
+        // Cria input inline
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = nomeAtual;
+        input.className = 'form-control form-control-sm d-inline w-auto';
+        input.style.marginRight = '5px';
+
+        // Substitui o span pelo input
+        li.replaceChild(input, span);
+
+        // Cria botão de salvar
+        const salvar = document.createElement('button');
+        salvar.textContent = '💾';
+        salvar.className = 'btn btn-sm btn-primary ms-1';
+
+        salvar.onclick = () => {
+            // Cria form dinamicamente para enviar
+            const form = document.createElement('form');
+            form.method = 'post';
+            form.action = '/Projeto/EditEtapa';
+            form.innerHTML = `
+                <input name="projetoId" type="hidden" value="${projetoId}" />
+                <input name="etapaId" type="hidden" value="${etapaId}" />
+                <input name="novoNome" type="hidden" value="${input.value}" />
+                <input name="__RequestVerificationToken" type="hidden" value="${document.querySelector('input[name=__RequestVerificationToken]').value}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+        };
+
+        li.appendChild(salvar);
+    }
+</script>
