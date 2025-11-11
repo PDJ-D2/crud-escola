@@ -1,0 +1,83 @@
+﻿@model IEnumerable<CRUD.Models.Projeto>
+
+@{
+    ViewData["Title"] = "Registros de Projetos";
+}
+
+<h1>📘 Registros de Projetos</h1>
+<hr />
+
+@if (!Model.Any())
+{
+    <p>Nenhum projeto registrado ainda.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var projeto in Model)
+        {
+            <div class="list-group-item mb-3">
+                <h3>@projeto.Nome</h3>
+                <p><strong>ID:</strong> @projeto.Id</p>
+
+                @if (projeto.Etapas != null && projeto.Etapas.Any())
+                {
+                    <h5>Etapas:</h5>
+                    <ul>
+                        @foreach (var etapa in projeto.Etapas)
+                        {
+                            <li class="mb-2">
+                                <strong>@etapa.Nome</strong>
+
+                                @if (etapa.Fotos != null && etapa.Fotos.Any())
+                                {
+                                    <div class="mt-2 d-flex flex-wrap gap-2">
+                                        @foreach (var foto in etapa.Fotos)
+                                        {
+                                            <img src="@foto"
+                                                 alt="Evidência da etapa"
+                                                 width="200"
+                                                 style="border-radius:8px; border:1px solid #ccc; cursor: zoom-in;"
+                                                 onclick="abrirZoom('@foto')" />
+                                        }
+
+                                    </div>
+                                }
+                                else
+                                {
+                                    <p class="text-muted mb-0">Nenhuma evidência enviada.</p>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted">Nenhuma etapa cadastrada.</p>
+                }
+            </div>
+        }
+    </div>
+}
+<!-- Modal de Zoom -->
+<div id="zoomModal"
+     style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+            background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:9999;"
+     onclick="fecharZoom()">
+    <img id="zoomImg"
+         src=""
+         style="max-width:90%; max-height:90%; border-radius:10px; box-shadow:0 0 20px rgba(255,255,255,0.3);" />
+</div>
+
+<script>
+    function abrirZoom(src) {
+        const modal = document.getElementById('zoomModal');
+        const img = document.getElementById('zoomImg');
+        img.src = src;
+        modal.style.display = 'flex';
+    }
+
+    function fecharZoom() {
+        document.getElementById('zoomModal').style.display = 'none';
+    }
+</script>

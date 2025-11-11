@@ -21,6 +21,7 @@ namespace CRUD.Models
         public int Id { get; set; }
         public string Nome { get; set; }
         public bool Concluida { get; set; }
+        public List<string> Fotos { get; set; } = new List<string>();
     }
 }
 

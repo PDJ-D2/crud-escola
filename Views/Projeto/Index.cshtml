@@ -1,4 +1,5 @@
 ﻿@model IEnumerable<CRUD.Models.Projeto>
+@using System.Linq
 
 <h1>Projetos Comunitários</h1>
 
@@ -9,12 +10,20 @@
 @foreach (var projeto in Model)
 {
     <div class="card mb-3">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
             <strong>@projeto.Nome</strong>
+
+            <!-- Botão de deletar projeto -->
+            <button class="btn btn-sm btn-danger"
+                    onclick="abrirModalExcluir('projeto', '@projeto.Nome', null, @projeto.Id)">
+                Excluir Projeto
+            </button>
         </div>
+
         <div class="card-body">
             <ul class="list-group">
-                @foreach (var etapa in projeto.Etapas)
+                @* Percorre com segurança mesmo se Etapas for null *@
+                @foreach (var etapa in projeto.Etapas ?? Enumerable.Empty<CRUD.Models.Etapa>())
                 {
                     <li class="list-group-item d-flex justify-content-between align-items-center" id="etapa-@etapa.Id">
                         <span class="etapa-nome" style="text-decoration:@(etapa.Concluida ? "line-through" : "none")">
@@ -32,25 +41,39 @@
                                 </button>
                             </form>
 
-                            <!-- Editar -->
-                            <button class="btn btn-outline-primary" onclick="habilitarEdicao(@projeto.Id, @etapa.Id)">✏️</button>
+                            <!-- Apenas para evitar referência nula (não exibimos aqui as fotos) -->
+                            @if (etapa.Fotos != null && etapa.Fotos.Any())
+                            {
+                                <!-- intencionalmente vazio -->
+                            }
 
-                            <!-- Excluir -->
-                            <form asp-action="DeleteEtapa" method="post" style="display:inline;">
+                            <!-- Botão de upload -->
+                            <form onsubmit="return false;" enctype="multipart/form-data" style="display:inline;">
                                 @Html.AntiForgeryToken()
                                 <input type="hidden" name="projetoId" value="@projeto.Id" />
                                 <input type="hidden" name="etapaId" value="@etapa.Id" />
-                                <button class="btn btn-sm btn-danger">X</button>
+                                <label class="btn btn-sm btn-outline-info">
+                                    📷 Foto
+                                    <input type="file" name="foto" accept="image/*" onchange="uploadFoto(this.form)" hidden />
+                                </label>
                             </form>
+
+                            <!-- Editar -->
+                            <button class="btn btn-outline-primary" onclick="habilitarEdicao(@projeto.Id, @etapa.Id)">✏️</button>
+
+                            <!-- Excluir etapa -->
+                            <button class="btn btn-sm btn-danger"
+                                    onclick="abrirModalExcluir('etapa', '@etapa.Nome', @etapa.Id, @projeto.Id)">
+                                X
+                            </button>
                         </div>
                     </li>
                 }
 
-                <!-- Adicionar nova etapa se houver menos de 5 -->
-                @if (projeto.Etapas.Count < 5)
+                @if ((projeto.Etapas ?? Enumerable.Empty<CRUD.Models.Etapa>()).Count() < 5)
                 {
                     <li class="list-group-item">
-                        <form asp-action="AddEtapa" method="post" class="d-flex">
+                        <form onsubmit="return adicionarEtapa(this, event)" class="d-flex">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="projetoId" value="@projeto.Id" />
                             <input type="text" name="nomeEtapa" class="form-control form-control-sm" placeholder="Nova etapa" required />
@@ -63,42 +86,163 @@
     </div>
 }
 
-<script>
-    function habilitarEdicao(projetoId, etapaId) {
-        const li = document.getElementById(`etapa-${etapaId}`);
-        const span = li.querySelector('.etapa-nome');
-        const nomeAtual = span.textContent;
+<!-- MODAL DE CONFIRMAÇÃO -->
+<div class="modal fade" id="modalConfirmacao" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirmação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body" id="textoConfirmacao"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formExcluir" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="projetoId" id="modalProjetoId" />
+                    <input type="hidden" name="etapaId" id="modalEtapaId" />
+                    <button type="submit" class="btn btn-danger">Excluir</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 
-        // Cria input inline
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = nomeAtual;
-        input.className = 'form-control form-control-sm d-inline w-auto';
-        input.style.marginRight = '5px';
+@section Scripts {
+    <script>
+        function habilitarEdicao(projetoId, etapaId) {
+            const li = document.getElementById(`etapa-${etapaId}`);
+            const span = li.querySelector('.etapa-nome');
+            const nomeAtual = span.textContent;
+            const btnGroup = li.querySelector('.btn-group');
 
-        // Substitui o span pelo input
-        li.replaceChild(input, span);
+            // Esconde os botões existentes (check, foto, editar, excluir)
+            const botoesOriginais = [...btnGroup.children];
+            botoesOriginais.forEach(b => b.style.display = 'none');
 
-        // Cria botão de salvar
-        const salvar = document.createElement('button');
-        salvar.textContent = '💾';
-        salvar.className = 'btn btn-sm btn-primary ms-1';
+            // Cria o campo de texto para editar
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = nomeAtual;
+            input.className = 'form-control form-control-sm d-inline w-auto me-2';
 
-        salvar.onclick = () => {
-            // Cria form dinamicamente para enviar
-            const form = document.createElement('form');
-            form.method = 'post';
-            form.action = '/Projeto/EditEtapa';
-            form.innerHTML = `
-                <input name="projetoId" type="hidden" value="${projetoId}" />
-                <input name="etapaId" type="hidden" value="${etapaId}" />
-                <input name="novoNome" type="hidden" value="${input.value}" />
-                <input name="__RequestVerificationToken" type="hidden" value="${document.querySelector('input[name=__RequestVerificationToken]').value}" />
-            `;
-            document.body.appendChild(form);
-            form.submit();
-        };
+            // Substitui o span pelo input
+            li.replaceChild(input, span);
 
-        li.appendChild(salvar);
-    }
-</script>
+            // Cria botões de ação
+            const salvar = document.createElement('button');
+            salvar.textContent = '💾 Salvar';
+            salvar.className = 'btn btn-sm btn-success me-2';
+
+            const cancelar = document.createElement('button');
+            cancelar.textContent = '❌ Cancelar';
+            cancelar.className = 'btn btn-sm btn-secondary';
+
+            // Ao clicar em salvar
+            salvar.onclick = () => {
+                const form = document.createElement('form');
+                form.method = 'post';
+                form.action = '/Projeto/EditEtapa';
+                form.innerHTML = `
+                    <input name="projetoId" type="hidden" value="${projetoId}" />
+                    <input name="etapaId" type="hidden" value="${etapaId}" />
+                    <input name="novoNome" type="hidden" value="${input.value}" />
+                    <input name="__RequestVerificationToken" type="hidden"
+                           value="${document.querySelector('input[name=__RequestVerificationToken]').value}" />
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            };
+
+            // Ao clicar em cancelar
+            cancelar.onclick = () => {
+                // Restaura o texto original
+                li.replaceChild(span, input);
+
+                // Remove os botões de salvar/cancelar
+                salvar.remove();
+                cancelar.remove();
+
+                // Reexibe os botões originais
+                botoesOriginais.forEach(b => b.style.display = '');
+            };
+
+            // Adiciona os botões lado a lado
+            btnGroup.appendChild(salvar);
+            btnGroup.appendChild(cancelar);
+        }
+
+        function abrirModalExcluir(tipo, nome, etapaId = null, projetoId = null) {
+            const modal = new bootstrap.Modal(document.getElementById('modalConfirmacao'));
+            const texto = document.getElementById('textoConfirmacao');
+            const form = document.getElementById('formExcluir');
+
+            if (tipo === 'projeto') {
+                texto.innerHTML = `Tem certeza que deseja excluir o projeto <strong>"${nome}"</strong>?`;
+                form.action = `/Projeto/Delete/${projetoId}`;
+                document.getElementById('modalProjetoId').value = projetoId;
+                document.getElementById('modalEtapaId').value = '';
+            } else if (tipo === 'etapa') {
+                texto.innerHTML = `Tem certeza que deseja excluir a etapa <strong>"${nome}"</strong>?`;
+                form.action = '/Projeto/DeleteEtapa';
+                document.getElementById('modalEtapaId').value = etapaId;
+                document.getElementById('modalProjetoId').value = projetoId;
+            }
+
+            modal.show();
+        }
+
+        async function adicionarEtapa(form, event) {
+            event.preventDefault();
+
+            const formData = new FormData(form);
+            const response = await fetch('/Projeto/AddEtapa', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                mostrarPopup("✅ Etapa adicionada com sucesso!");
+                form.reset();
+
+                // Recarrega a página para que o Index seja re-renderizado e a etapa apareça.
+                // Pequeno delay para o popup aparecer primeiro.
+                setTimeout(() => location.reload(), 900);
+            } else {
+                mostrarPopup("❌ Erro ao adicionar etapa.", true);
+            }
+
+            return false;
+        }
+
+        function mostrarPopup(mensagem, erro = false) {
+            const popup = document.createElement('div');
+            popup.textContent = mensagem;
+            popup.className = `alert ${erro ? 'alert-danger' : 'alert-success'} position-fixed top-0 end-0 m-3 shadow`;
+            popup.style.zIndex = 2000;
+            popup.style.transition = 'opacity 0.5s';
+            popup.style.opacity = '1';
+            document.body.appendChild(popup);
+
+            setTimeout(() => popup.style.opacity = '0', 2000);
+            setTimeout(() => popup.remove(), 2500);
+        }
+
+        async function uploadFoto(form) {
+            const formData = new FormData(form);
+            const response = await fetch('/Projeto/UploadFoto', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                mostrarPopup("📸 Foto registrada — veja em Registros!");
+                // NÃO recarregamos a página automaticamente (você disse que quer assim)
+            } else {
+                mostrarPopup("❌ Erro ao enviar foto.", true);
+            }
+        }
+    </script>
+}
+
+
